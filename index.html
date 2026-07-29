@@ -951,6 +951,7 @@ function buildWorkerSource(){
     '      }',
     '    }',
     '    self.postMessage({ type: "progress", done: subs.length, total: subs.length, sub: subs[subs.length - 1] });',
+    '    self.postMessage({ type: "phase", phase: "packing" });',
     '    var packed = packRects(packItems, opts.padding);',
     '    var canvasW = packed.width, canvasH = packed.height;',
     '    if (opts.pow2){ canvasW = nextPow2(canvasW); canvasH = nextPow2(canvasH); }',
@@ -964,6 +965,7 @@ function buildWorkerSource(){
     '      frameEntries[p.ref.idx] = { name: p.ref.name, x: p.x, y: p.y, w: p.ref.w, h: p.ref.h,',
     '        frameX: p.ref.frameX, frameY: p.ref.frameY, frameW: p.ref.frameW, frameH: p.ref.frameH };',
     '    });',
+    '    self.postMessage({ type: "phase", phase: "encoding" });',
     '    var origPixels = bitmap.width * bitmap.height;',
     '    var newPixels = canvasW * canvasH;',
     '    var pixelReduction = origPixels > 0 ? (1 - newPixels / origPixels) * 100 : 0;',
@@ -980,7 +982,7 @@ function buildWorkerSource(){
 }
 
 var workerSourceUrl = null;
-function runInWorker(bitmap, subs, opts, onProgress){
+function runInWorker(bitmap, subs, opts, onProgress, onPhase){
   return new Promise(function(resolve, reject){
     if (!workerSourceUrl){
       workerSourceUrl = URL.createObjectURL(new Blob([buildWorkerSource()], { type: 'application/javascript' }));
@@ -990,6 +992,8 @@ function runInWorker(bitmap, subs, opts, onProgress){
       var msg = e.data;
       if (msg.type === 'progress'){
         if (onProgress) onProgress(msg.done, msg.total, msg.sub);
+      } else if (msg.type === 'phase'){
+        if (onPhase) onPhase(msg.phase);
       } else if (msg.type === 'done'){
         worker.terminate();
         resolve(msg);
@@ -1014,7 +1018,7 @@ async function processAtlas(pngImage, atlasText, opts){
       var bitmap = await createImageBitmap(pngImage);
       var result = await runInWorker(bitmap, atlas.subs, {
         threshold: opts.threshold, padding: opts.padding, extrude: opts.extrude, pow2: opts.pow2
-      }, opts.onFrame);
+      }, opts.onFrame, opts.onPhase);
       return {
         blob: result.blob,
         subs: atlas.subs,
@@ -1075,6 +1079,8 @@ async function processAtlasMainThread(pngImage, atlas, opts){
     }
   }
 
+  if (opts.onPhase) opts.onPhase('packing');
+
   var packed = packRects(packItems, opts.padding);
   var canvasW = packed.width;
   var canvasH = packed.height;
@@ -1090,7 +1096,9 @@ async function processAtlasMainThread(pngImage, atlas, opts){
   outCtx.imageSmoothingEnabled = false;
 
   var frameEntries = new Array(packItems.length);
-  packed.placed.forEach(function(p){
+  lastYield = performance.now();
+  for (var pIdx = 0; pIdx < packed.placed.length; pIdx++){
+    var p = packed.placed[pIdx];
     outCtx.drawImage(p.ref.canvas, p.x, p.y);
     if (opts.extrude) extrude(outCtx, p.x, p.y, p.ref.w, p.ref.h, canvasW, canvasH);
     frameEntries[p.ref.idx] = {
@@ -1099,7 +1107,13 @@ async function processAtlasMainThread(pngImage, atlas, opts){
       frameX: p.ref.frameX, frameY: p.ref.frameY,
       frameW: p.ref.frameW, frameH: p.ref.frameH
     };
-  });
+    if (performance.now() - lastYield > 12){
+      await new Promise(function(r){ setTimeout(r, 0); });
+      lastYield = performance.now();
+    }
+  }
+
+  if (opts.onPhase) opts.onPhase('encoding');
 
   var origPixels = pngImage.width * pngImage.height;
   var newPixels = canvasW * canvasH;
@@ -1164,8 +1178,13 @@ async function run(){
         format: pair.atlasFormat,
         onFrame: function(done, total, sub){
           scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + 'scanning ' + done + '/' + total;
-          setProgress(pairBase + (done / total) * pairSpan);
+          setProgress(pairBase + (done / total) * pairSpan * 0.7);
           drawScanBox(sub, scale);
+        },
+        onPhase: function(phase){
+          var label = phase === 'packing' ? 'packing sprites…' : 'encoding png…';
+          scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + label;
+          setProgress(pairBase + pairSpan * (phase === 'packing' ? 0.75 : 0.9));
         }
       }));
 
@@ -1213,7 +1232,10 @@ async function run(){
 
   var zipName = multi ? 'funkin-optimizer-batch.zip' : (state.pairs[0].key + '-optimized.zip');
 
-  zip.generateAsync({ type: 'blob' }).then(function(content){
+  scannerStatus.textContent = 'packaging .zip…';
+  zip.generateAsync({ type: 'blob', compression: 'STORE' }, function(meta){
+    setProgress(88 + meta.percent * 0.12);
+  }).then(function(content){
     setProgress(100);
     var url = URL.createObjectURL(content);
     var a = document.createElement('a');
