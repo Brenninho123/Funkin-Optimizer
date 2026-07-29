@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Funkin' Optimizer</title>
+<meta name="description" content="Drop a Sparrow atlas and get back a trimmed, repacked spritesheet in seconds.">
+<meta name="theme-color" content="#0b0f14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FNF Optimizer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f14;
+  --bg-2:#0f151c;
+  --panel:#121820;
+  --panel-2:#171f29;
+  --border:rgba(232,238,242,0.09);
+  --border-strong:rgba(232,238,242,0.18);
+  --text:#e8eef2;
+  --muted:#7c8a96;
+  --amber:#ffb000;
+  --amber-dim:#8a6300;
+  --magenta:#ff3b7f;
+  --green:#39ff88;
+  --danger:#ff5c5c;
+  --sans:'Space Grotesk',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --radius:14px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(ellipse at 15% -10%, rgba(255,176,0,0.08), transparent 45%),
+    radial-gradient(ellipse at 90% 0%, rgba(255,59,127,0.08), transparent 40%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+}
+a{color:inherit;}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+header.top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 0;
+}
+.brand{display:flex;align-items:center;gap:12px;}
+.brand-mark{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(155deg, var(--amber), #cc8b00);
+  position:relative;flex:none;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.08) inset, 0 6px 18px rgba(255,176,0,0.25);
+}
+.brand-mark::after{
+  content:"";position:absolute;left:50%;top:50%;width:70%;height:2px;
+  background:var(--bg);transform:translate(-50%,-50%);
+}
+.brand-name{font-family:var(--mono);font-weight:700;letter-spacing:0.02em;font-size:14px;}
+.brand-name .prime{color:var(--amber);}
+nav.top-links{display:flex;gap:22px;font-family:var(--mono);font-size:12.5px;color:var(--muted);}
+nav.top-links a{text-decoration:none;transition:color .15s;}
+nav.top-links a:hover{color:var(--text);}
+
+.eyebrow{
+  font-family:var(--mono);font-size:12px;letter-spacing:0.12em;text-transform:uppercase;
+  color:var(--magenta);display:flex;align-items:center;gap:10px;margin-bottom:18px;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--magenta);display:inline-block;}
+
+.hero{padding:34px 0 10px;display:grid;grid-template-columns:1.05fr 0.95fr;gap:46px;align-items:start;}
+@media (max-width:880px){.hero{grid-template-columns:1fr;}}
+h1{
+  font-size:clamp(34px,5.4vw,54px);line-height:1.02;margin:0 0 18px;letter-spacing:-0.01em;
+}
+h1 .accent{color:var(--amber);}
+.lead{color:var(--muted);font-size:17px;line-height:1.55;max-width:46ch;margin:0 0 26px;}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:30px;}
+.tag{
+  font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  border:1px solid var(--border-strong);border-radius:999px;padding:5px 12px;
+}
+
+.scanner{
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:linear-gradient(180deg, var(--panel), var(--bg-2));
+  padding:16px;position:relative;overflow:hidden;
+  box-shadow:0 30px 60px -30px rgba(0,0,0,0.6);
+}
+.scanner-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--muted);}
+.dot-row{display:flex;gap:6px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--border-strong);}
+.stage{
+  position:relative;border-radius:10px;border:1px dashed var(--border-strong);
+  min-height:280px;display:flex;align-items:center;justify-content:center;
+  background:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px) 0 0/22px 22px,
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0/22px 22px,
+    #0a0e13;
+  overflow:hidden;cursor:pointer;transition:border-color .15s, background-color .15s;
+}
+.stage.drag{border-color:var(--amber);background-color:#0d1319;}
+.stage canvas{max-width:100%;max-height:280px;image-rendering:pixelated;position:relative;z-index:2;}
+.stage-empty{text-align:center;color:var(--muted);padding:20px;position:relative;z-index:2;}
+.stage-empty svg{margin-bottom:12px;opacity:0.7;}
+.stage-empty b{color:var(--text);display:block;font-size:14.5px;margin-bottom:4px;}
+.stage-empty span{font-size:12.5px;}
+.scanline{
+  position:absolute;left:0;right:0;height:44px;z-index:3;pointer-events:none;
+  background:linear-gradient(180deg, transparent, rgba(255,176,0,0.22) 45%, rgba(255,176,0,0.55) 50%, rgba(255,176,0,0.22) 55%, transparent);
+  top:-60px;opacity:0;
+}
+.scanline.on{animation:sweep 1.3s linear infinite;opacity:1;}
+@keyframes sweep{from{top:-60px;}to{top:100%;}}
+
+.file-row{display:flex;gap:10px;margin-top:12px;}
+.file-slot{
+  flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  font-family:var(--mono);font-size:11.5px;display:flex;align-items:center;gap:8px;
+  background:var(--panel-2);
+}
+.file-slot .k{color:var(--muted);}
+.file-slot .v{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.file-slot.ok{border-color:rgba(57,255,136,0.35);}
+.chip{width:6px;height:6px;border-radius:50%;background:var(--border-strong);flex:none;}
+.file-slot.ok .chip{background:var(--green);box-shadow:0 0 8px rgba(57,255,136,0.7);}
+
+.btn{
+  font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:0.02em;
+  border-radius:9px;border:1px solid transparent;padding:12px 18px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:transform .12s, filter .15s, opacity .15s;
+}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:var(--amber);color:#1a1200;}
+.btn-primary:hover{filter:brightness(1.08);}
+.btn-primary:disabled{opacity:0.35;cursor:not-allowed;filter:none;}
+.btn-ghost{background:transparent;border-color:var(--border-strong);color:var(--text);}
+.btn-ghost:hover{border-color:var(--amber);}
+.btn-block{width:100%;margin-top:14px;padding:14px;}
+
+.progress{height:3px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:14px;}
+.progress i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--magenta),var(--amber));transition:width .25s;}
+
+section.how{padding:70px 0 20px;}
+.section-title{font-size:26px;margin:0 0 34px;}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+@media (max-width:880px){.steps{grid-template-columns:1fr 1fr;}}
+@media (max-width:520px){.steps{grid-template-columns:1fr;}}
+.step{
+  border:1px solid var(--border);border-radius:12px;padding:20px 18px;background:var(--panel);
+  position:relative;
+}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--magenta);margin-bottom:14px;}
+.step h3{font-size:15.5px;margin:0 0 8px;}
+.step p{font-size:13px;color:var(--muted);line-height:1.5;margin:0;}
+
+section.results{padding:40px 0;}
+.result-panel{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);
+  padding:26px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+}
+@media (max-width:700px){.result-panel{grid-template-columns:1fr 1fr;}}
+.stat{padding:6px 22px;border-left:1px solid var(--border);}
+.stat:first-child{border-left:none;}
+@media (max-width:700px){.stat{border-left:none;border-top:1px solid var(--border);padding-top:16px;margin-top:16px;}
+  .stat:nth-child(1),.stat:nth-child(2){border-top:none;margin-top:0;padding-top:6px;}}
+.stat .label{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;}
+.stat .value{font-family:var(--mono);font-size:26px;font-weight:700;}
+.stat .value.green{color:var(--green);}
+.stat .value.amber{color:var(--amber);}
+.result-empty{color:var(--muted);font-family:var(--mono);font-size:13px;text-align:center;padding:14px;}
+
+.adv{border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);margin-top:22px;overflow:hidden;}
+.adv summary{
+  cursor:pointer;padding:16px 20px;font-family:var(--mono);font-size:12.5px;letter-spacing:0.04em;
+  color:var(--muted);list-style:none;display:flex;align-items:center;justify-content:space-between;
+}
+.adv summary::-webkit-details-marker{display:none;}
+.adv summary .car{transition:transform .2s;}
+.adv[open] summary .car{transform:rotate(180deg);}
+.adv-body{padding:4px 20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media (max-width:700px){.adv-body{grid-template-columns:1fr;}}
+.field{display:flex;flex-direction:column;gap:8px;}
+.field label{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;}
+.field input[type=range]{accent-color:var(--amber);}
+.field-toggle{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:9px;padding:12px 14px;}
+.field-toggle .t{font-size:13px;}
+.field-toggle .d{font-size:11.5px;color:var(--muted);margin-top:3px;}
+.switch{position:relative;width:38px;height:22px;flex:none;}
+.switch input{opacity:0;width:100%;height:100%;position:absolute;margin:0;cursor:pointer;z-index:1;}
+.switch .track{position:absolute;inset:0;background:var(--border-strong);border-radius:20px;transition:background .15s;}
+.switch .thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--text);transition:transform .15s;}
+.switch input:checked ~ .track{background:var(--amber);}
+.switch input:checked ~ .thumb{transform:translateX(16px);background:#1a1200;}
+
+section.install{padding:50px 0 30px;}
+.install-panel{
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:linear-gradient(135deg, rgba(255,176,0,0.06), rgba(255,59,127,0.05));
+  padding:30px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+}
+.install-panel h3{margin:0 0 6px;font-size:19px;}
+.install-panel p{margin:0;color:var(--muted);font-size:13.5px;max-width:52ch;}
+.install-hint{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:8px;display:none;}
+
+footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
+.foot-row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;color:var(--muted);font-family:var(--mono);font-size:11.5px;}
+
+.toast{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--panel-2);border:1px solid var(--border-strong);border-radius:10px;
+  padding:12px 18px;font-family:var(--mono);font-size:12.5px;opacity:0;pointer-events:none;
+  transition:opacity .2s, transform .2s;z-index:50;box-shadow:0 20px 40px rgba(0,0,0,0.4);
+  display:flex;align-items:center;gap:10px;max-width:90vw;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast .chip{background:var(--green);}
+.toast.err .chip{background:var(--danger);}
+
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="brand-name">FUNKIN'<span class="prime">_</span>OPTIMIZER</div>
+    </div>
+    <nav class="top-links">
+      <a href="#how">Pipeline</a>
+      <a href="#results">Results</a>
+      <a href="#install">Install</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Sparrow / Starling atlas tool</div>
+      <h1>Trim the fat off<br>your <span class="accent">spritesheets</span>.</h1>
+      <p class="lead">Drop a PNG and its XML atlas. Every frame gets scanned for wasted transparent padding, repacked into the smallest sheet that fits, and shipped back to you as a ready-to-use .zip — automatically.</p>
+      <div class="tags">
+        <span class="tag">Sparrow / Starling XML</span>
+        <span class="tag">Edge extrusion</span>
+        <span class="tag">Runs fully in-browser</span>
+        <span class="tag">Installable app</span>
+      </div>
+      <div class="file-row">
+        <div class="file-slot" id="slot-png"><span class="chip"></span><span class="k">PNG</span><span class="v" id="slot-png-name">not loaded</span></div>
+        <div class="file-slot" id="slot-xml"><span class="chip"></span><span class="k">XML</span><span class="v" id="slot-xml-name">not loaded</span></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="run-btn" disabled>Optimize &amp; download .zip</button>
+      <div class="progress" id="progress-wrap" style="display:none;"><i id="progress-bar"></i></div>
+    </div>
+
+    <div class="scanner">
+      <div class="scanner-head">
+        <div class="dot-row"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <span id="scanner-status">idle</span>
+      </div>
+      <div class="stage" id="stage" tabindex="0" role="button" aria-label="Drop or select PNG and XML files">
+        <div class="scanline" id="scanline"></div>
+        <div class="stage-empty" id="stage-empty">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#7c8a96" stroke-width="1.4"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <b>Drop your atlas here</b>
+          <span>or click to browse — one .png + one .xml</span>
+        </div>
+        <canvas id="preview-canvas" style="display:none;"></canvas>
+      </div>
+      <input type="file" id="file-input" accept=".png,.xml" multiple class="visually-hidden">
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <h2 class="section-title">The pipeline</h2>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><h3>Drop</h3><p>Give it a PNG spritesheet and its matching Sparrow/Starling XML atlas.</p></div>
+      <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every SubTexture is measured pixel-by-pixel for transparent padding beyond its declared frame.</p></div>
+      <div class="step"><div class="n">03</div><h3>Repack</h3><p>Trimmed frames are re-packed into the smallest sheet that fits, edges extruded to stop bleeding.</p></div>
+      <div class="step"><div class="n">04</div><h3>Download</h3><p>Optimized PNG, rewritten XML and a savings report land in a .zip, downloaded automatically.</p></div>
+    </div>
+
+    <details class="adv">
+      <summary>Advanced settings <svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="adv-body">
+        <div class="field">
+          <label>Alpha trim threshold <span id="thresh-val">0</span></label>
+          <input type="range" id="thresh" min="0" max="64" value="0">
+        </div>
+        <div class="field">
+          <label>Padding between frames (px) <span id="pad-val">2</span></label>
+          <input type="range" id="pad" min="0" max="8" value="2">
+        </div>
+        <div class="field-toggle">
+          <div><div class="t">Extrude edges</div><div class="d">Duplicates the outer pixel row/column to stop filtering bleed.</div></div>
+          <label class="switch"><input type="checkbox" id="extrude" checked><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <div class="field-toggle">
+          <div><div class="t">Power-of-two canvas</div><div class="d">Rounds the final sheet up to 2,4,8…2048 per side.</div></div>
+          <label class="switch"><input type="checkbox" id="pow2"><span class="track"></span><span class="thumb"></span></label>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="results" id="results">
+    <h2 class="section-title">Results</h2>
+    <div class="result-panel" id="result-panel">
+      <div class="result-empty" style="grid-column:1/-1;">Run an optimization to see the readout.</div>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <div class="install-panel">
+      <div>
+        <h3>Install it as an app</h3>
+        <p>Funkin' Optimizer works offline once installed — no browser tab, its own icon, one tap to open.</p>
+        <div class="install-hint" id="ios-hint">On iPhone/iPad: tap Share, then "Add to Home Screen".</div>
+      </div>
+      <button class="btn btn-ghost" id="install-btn" style="display:none;">Install app</button>
+    </div>
+  </section>
+
+  <footer>
+    <div class="foot-row">
+      <span>Funkin' Optimizer — runs entirely on your device, nothing is uploaded.</span>
+      <span>Sparrow / Starling XML atlas format</span>
+    </div>
+  </footer>
+</div>
+
+<div class="toast" id="toast"><span class="chip"></span><span id="toast-msg"></span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function(){
+
+var state = { pngFile:null, xmlFile:null, pngImage:null };
+
+var stage = document.getElementById('stage');
+var fileInput = document.getElementById('file-input');
+var scanline = document.getElementById('scanline');
+var stageEmpty = document.getElementById('stage-empty');
+var previewCanvas = document.getElementById('preview-canvas');
+var runBtn = document.getElementById('run-btn');
+var scannerStatus = document.getElementById('scanner-status');
+var progressWrap = document.getElementById('progress-wrap');
+var progressBar = document.getElementById('progress-bar');
+
+var slotPng = document.getElementById('slot-png');
+var slotXml = document.getElementById('slot-xml');
+var slotPngName = document.getElementById('slot-png-name');
+var slotXmlName = document.getElementById('slot-xml-name');
+
+function showToast(msg, isErr){
+  var t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(function(){ t.classList.remove('show'); }, 3600);
+}
+
+function setProgress(pct){
+  progressWrap.style.display = pct >= 0 && pct < 100 ? 'block' : (pct >= 100 ? 'block' : 'none');
+  progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  if (pct >= 100) setTimeout(function(){ progressWrap.style.display = 'none'; progressBar.style.width = '0%'; }, 700);
+}
+
+stage.addEventListener('click', function(){ fileInput.click(); });
+stage.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+
+['dragenter','dragover'].forEach(function(ev){
+  stage.addEventListener(ev, function(e){ e.preventDefault(); stage.classList.add('drag'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  stage.addEventListener(ev, function(e){ e.preventDefault(); stage.classList.remove('drag'); });
+});
+stage.addEventListener('drop', function(e){
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', function(){
+  handleFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+function handleFiles(fileList){
+  var files = Array.prototype.slice.call(fileList || []);
+  files.forEach(function(f){
+    var lower = f.name.toLowerCase();
+    if (lower.endsWith('.png')) state.pngFile = f;
+    else if (lower.endsWith('.xml')) state.xmlFile = f;
+  });
+  if (state.pngFile){
+    slotPng.classList.add('ok');
+    slotPngName.textContent = state.pngFile.name;
+  }
+  if (state.xmlFile){
+    slotXml.classList.add('ok');
+    slotXmlName.textContent = state.xmlFile.name;
+  }
+  if (state.pngFile){
+    var url = URL.createObjectURL(state.pngFile);
+    var img = new Image();
+    img.onload = function(){
+      state.pngImage = img;
+      stageEmpty.style.display = 'none';
+      previewCanvas.style.display = 'block';
+      var ctx = previewCanvas.getContext('2d');
+      var maxW = 460, maxH = 260;
+      var scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      previewCanvas.width = Math.max(1, Math.round(img.width * scale));
+      previewCanvas.height = Math.max(1, Math.round(img.height * scale));
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+  runBtn.disabled = !(state.pngFile && state.xmlFile);
+  if (runBtn.disabled === false) scannerStatus.textContent = 'ready';
+}
+
+function parseAtlas(xmlText){
+  var doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  var perr = doc.querySelector('parsererror');
+  if (perr) throw new Error('Could not parse the XML atlas.');
+  var root = doc.documentElement;
+  var imagePath = root.getAttribute('imagePath') || 'spritesheet.png';
+  var nodes = Array.prototype.slice.call(doc.getElementsByTagName('SubTexture'));
+  var subs = nodes.map(function(n){
+    var g = function(name, def){ var v = n.getAttribute(name); return v === null ? def : v; };
+    var width = parseFloat(g('width', '0'));
+    var height = parseFloat(g('height', '0'));
+    var hasFrame = n.hasAttribute('frameX') || n.hasAttribute('frameWidth');
+    return {
+      name: g('name', ''),
+      x: parseFloat(g('x', '0')),
+      y: parseFloat(g('y', '0')),
+      width: width,
+      height: height,
+      rotated: g('rotated', 'false') === 'true',
+      frameX: parseFloat(g('frameX', '0')),
+      frameY: parseFloat(g('frameY', '0')),
+      frameWidth: hasFrame ? parseFloat(g('frameWidth', width)) : width,
+      frameHeight: hasFrame ? parseFloat(g('frameHeight', height)) : height
+    };
+  });
+  return { imagePath: imagePath, subs: subs };
+}
+
+function buildAtlasXml(imagePath, frames){
+  var lines = [];
+  lines.push('<TextureAtlas imagePath="' + escapeXml(imagePath) + '">');
+  frames.forEach(function(f){
+    var attrs = 'name="' + escapeXml(f.name) + '" x="' + f.x + '" y="' + f.y + '" width="' + f.w + '" height="' + f.h + '"';
+    if (f.frameX !== 0 || f.frameY !== 0 || f.frameW !== f.w || f.frameH !== f.h){
+      attrs += ' frameX="' + f.frameX + '" frameY="' + f.frameY + '" frameWidth="' + f.frameW + '" frameHeight="' + f.frameH + '"';
+    }
+    lines.push('\t<SubTexture ' + attrs + '/>');
+  });
+  lines.push('</TextureAtlas>');
+  return lines.join('\n');
+}
+
+function escapeXml(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+function extractRegion(srcCanvas, x, y, w, h, rotated){
+  var rw = rotated ? h : w;
+  var rh = rotated ? w : h;
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, w);
+  c.height = Math.max(1, h);
+  var ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  if (rotated){
+    ctx.save();
+    ctx.translate(0, h);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(srcCanvas, x, y, rw, rh, 0, 0, rh, rw);
+    ctx.restore();
+  } else {
+    ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+  }
+  return c;
+}
+
+function trimCanvas(canvas, threshold){
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  if (w <= 1 && h <= 1) return { left:0, top:0, right:0, bottom:0, w:w, h:h };
+  var data = ctx.getImageData(0, 0, w, h).data;
+  var minX = w, minY = h, maxX = -1, maxY = -1;
+  for (var yy = 0; yy < h; yy++){
+    for (var xx = 0; xx < w; xx++){
+      var a = data[(yy * w + xx) * 4 + 3];
+      if (a > threshold){
+        if (xx < minX) minX = xx;
+        if (xx > maxX) maxX = xx;
+        if (yy < minY) minY = yy;
+        if (yy > maxY) maxY = yy;
+      }
+    }
+  }
+  if (maxX < 0){
+    return { left:0, top:0, right:w - 1, bottom:h - 1, w:1, h:1, empty:true };
+  }
+  return { left:minX, top:minY, right:w - 1 - maxX, bottom:h - 1 - maxY, w:(maxX - minX + 1), h:(maxY - minY + 1) };
+}
+
+function packRects(items, padding){
+  var sorted = items.slice().sort(function(a, b){ return b.h - a.h || b.w - a.w; });
+  var totalArea = sorted.reduce(function(s, it){ return s + (it.w + padding) * (it.h + padding); }, 0);
+  var targetW = Math.max(64, Math.ceil(Math.sqrt(totalArea) * 1.05));
+  var x = padding, y = padding, shelfH = 0, maxW = 0;
+  var placed = [];
+  sorted.forEach(function(it){
+    if (x + it.w + padding > targetW && x > padding){
+      x = padding;
+      y += shelfH + padding;
+      shelfH = 0;
+    }
+    placed.push({ ref: it, x: x, y: y });
+    x += it.w + padding;
+    shelfH = Math.max(shelfH, it.h);
+    maxW = Math.max(maxW, x);
+  });
+  var totalH = y + shelfH + padding;
+  return { placed: placed, width: maxW, height: totalH };
+}
+
+function nextPow2(n){
+  var p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
+function extrude(ctx, x, y, w, h, canvasW, canvasH){
+  if (x > 0) ctx.drawImage(ctx.canvas, x, y, 1, h, x - 1, y, 1, h);
+  if (x + w < canvasW) ctx.drawImage(ctx.canvas, x + w - 1, y, 1, h, x + w, y, 1, h);
+  if (y > 0) ctx.drawImage(ctx.canvas, x, y, w, 1, x, y - 1, w, 1);
+  if (y + h < canvasH) ctx.drawImage(ctx.canvas, x, y + h - 1, w, 1, x, y + h, w, 1);
+  if (x > 0 && y > 0) ctx.drawImage(ctx.canvas, x, y, 1, 1, x - 1, y - 1, 1, 1);
+  if (x + w < canvasW && y > 0) ctx.drawImage(ctx.canvas, x + w - 1, y, 1, 1, x + w, y - 1, 1, 1);
+  if (x > 0 && y + h < canvasH) ctx.drawImage(ctx.canvas, x, y + h - 1, 1, 1, x - 1, y + h, 1, 1);
+  if (x + w < canvasW && y + h < canvasH) ctx.drawImage(ctx.canvas, x + w - 1, y + h - 1, 1, 1, x + w, y + h, 1, 1);
+}
+
+function run(){
+  if (!state.pngFile || !state.xmlFile) return;
+  runBtn.disabled = true;
+  scannerStatus.textContent = 'scanning';
+  scanline.classList.add('on');
+  setProgress(6);
+
+  var xmlReader = new FileReader();
+  xmlReader.onload = function(){
+    var xmlText = xmlReader.result;
+    var atlas;
+    try { atlas = parseAtlas(xmlText); }
+    catch (err){
+      finishWithError(err.message);
+      return;
+    }
+    setProgress(18);
+
+    var srcCanvas = document.createElement('canvas');
+    srcCanvas.width = state.pngImage.width;
+    srcCanvas.height = state.pngImage.height;
+    var sctx = srcCanvas.getContext('2d');
+    sctx.imageSmoothingEnabled = false;
+    sctx.drawImage(state.pngImage, 0, 0);
+
+    var threshold = parseInt(document.getElementById('thresh').value, 10);
+    var padding = parseInt(document.getElementById('pad').value, 10);
+    var doExtrude = document.getElementById('extrude').checked;
+    var doPow2 = document.getElementById('pow2').checked;
+
+    var originalArea = 0;
+    var trimmedArea = 0;
+    var framesTrimmed = 0;
+    var packItems = [];
+
+    atlas.subs.forEach(function(sub, idx){
+      originalArea += sub.width * sub.height;
+      var regionCanvas = extractRegion(srcCanvas, sub.x, sub.y, sub.width, sub.height, sub.rotated);
+      var box = trimCanvas(regionCanvas, threshold);
+      var changed = !(box.left === 0 && box.top === 0 && box.w === regionCanvas.width && box.h === regionCanvas.height);
+      if (changed) framesTrimmed++;
+
+      var outCanvas = document.createElement('canvas');
+      outCanvas.width = box.w;
+      outCanvas.height = box.h;
+      var octx = outCanvas.getContext('2d');
+      octx.imageSmoothingEnabled = false;
+      octx.drawImage(regionCanvas, -box.left, -box.top);
+
+      trimmedArea += box.w * box.h;
+
+      packItems.push({
+        idx: idx,
+        name: sub.name,
+        w: box.w,
+        h: box.h,
+        canvas: outCanvas,
+        frameX: sub.frameX + box.left,
+        frameY: sub.frameY + box.top,
+        frameW: sub.frameWidth,
+        frameH: sub.frameHeight
+      });
+    });
+
+    setProgress(46);
+
+    var packed = packRects(packItems, padding);
+    var canvasW = packed.width;
+    var canvasH = packed.height;
+    if (doPow2){
+      canvasW = nextPow2(canvasW);
+      canvasH = nextPow2(canvasH);
+    }
+
+    var outSheet = document.createElement('canvas');
+    outSheet.width = canvasW;
+    outSheet.height = canvasH;
+    var outCtx = outSheet.getContext('2d');
+    outCtx.imageSmoothingEnabled = false;
+
+    var frameEntries = new Array(packItems.length);
+    packed.placed.forEach(function(p){
+      outCtx.drawImage(p.ref.canvas, p.x, p.y);
+      if (doExtrude) extrude(outCtx, p.x, p.y, p.ref.w, p.ref.h, canvasW, canvasH);
+      frameEntries[p.ref.idx] = {
+        name: p.ref.name,
+        x: p.x, y: p.y, w: p.ref.w, h: p.ref.h,
+        frameX: p.ref.frameX, frameY: p.ref.frameY,
+        frameW: p.ref.frameW, frameH: p.ref.frameH
+      };
+    });
+
+    setProgress(70);
+
+    var baseName = state.pngFile.name.replace(/\.png$/i, '');
+    var outXml = buildAtlasXml(baseName + '.png', frameEntries);
+
+    outSheet.toBlob(function(blob){
+      setProgress(84);
+      var zip = new JSZip();
+      zip.file(baseName + '.png', blob);
+      zip.file(baseName + '.xml', outXml);
+
+      var origPixels = state.pngImage.width * state.pngImage.height;
+      var newPixels = canvasW * canvasH;
+      var pixelReduction = origPixels > 0 ? (1 - newPixels / origPixels) * 100 : 0;
+
+      var report = [
+        'Funkin\' Optimizer report',
+        '',
+        'Source sheet: ' + state.pngImage.width + 'x' + state.pngImage.height + ' (' + origPixels.toLocaleString() + ' px)',
+        'Optimized sheet: ' + canvasW + 'x' + canvasH + ' (' + newPixels.toLocaleString() + ' px)',
+        'Canvas area reduction: ' + pixelReduction.toFixed(1) + '%',
+        'Frames total: ' + atlas.subs.length,
+        'Frames trimmed: ' + framesTrimmed,
+        'Alpha threshold: ' + threshold,
+        'Padding: ' + padding + 'px',
+        'Edge extrusion: ' + (doExtrude ? 'on' : 'off'),
+        'Power-of-two: ' + (doPow2 ? 'on' : 'off')
+      ].join('\n');
+      zip.file('report.txt', report);
+
+      zip.generateAsync({ type: 'blob' }).then(function(content){
+        setProgress(100);
+        var url = URL.createObjectURL(content);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = baseName + '-optimized.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+
+        renderResults({
+          origW: state.pngImage.width, origH: state.pngImage.height,
+          newW: canvasW, newH: canvasH,
+          framesTotal: atlas.subs.length, framesTrimmed: framesTrimmed,
+          pixelReduction: pixelReduction, zipSize: content.size
+        });
+        drawTrimOverlay(srcCanvas, atlas.subs);
+        scannerStatus.textContent = 'done';
+        scanline.classList.remove('on');
+        runBtn.disabled = false;
+        showToast('Optimized sheet downloaded as ' + baseName + '-optimized.zip');
+      });
+    }, 'image/png');
+  };
+  xmlReader.onerror = function(){ finishWithError('Could not read the XML file.'); };
+  xmlReader.readAsText(state.xmlFile);
+}
+
+function finishWithError(msg){
+  scanline.classList.remove('on');
+  scannerStatus.textContent = 'error';
+  runBtn.disabled = false;
+  setProgress(-1);
+  showToast(msg, true);
+}
+
+function drawTrimOverlay(srcCanvas, subs){
+  var ctx = previewCanvas.getContext('2d');
+  var scaleX = previewCanvas.width / srcCanvas.width;
+  var scaleY = previewCanvas.height / srcCanvas.height;
+  ctx.drawImage(srcCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+  ctx.strokeStyle = '#39ff88';
+  ctx.lineWidth = 1;
+  subs.forEach(function(s){
+    ctx.strokeRect(s.x * scaleX, s.y * scaleY, s.width * scaleX, s.height * scaleY);
+  });
+}
+
+function renderResults(r){
+  var panel = document.getElementById('result-panel');
+  panel.innerHTML =
+    '<div class="stat"><div class="label">Canvas</div><div class="value">' + r.origW + '&times;' + r.origH + ' &rarr; <span class="amber">' + r.newW + '&times;' + r.newH + '</span></div></div>' +
+    '<div class="stat"><div class="label">Area reduction</div><div class="value green">' + r.pixelReduction.toFixed(1) + '%</div></div>' +
+    '<div class="stat"><div class="label">Frames trimmed</div><div class="value">' + r.framesTrimmed + ' <span style="color:var(--muted);font-size:15px;">/ ' + r.framesTotal + '</span></div></div>' +
+    '<div class="stat"><div class="label">Zip size</div><div class="value">' + (r.zipSize / 1024).toFixed(1) + ' KB</div></div>';
+}
+
+document.getElementById('thresh').addEventListener('input', function(){
+  document.getElementById('thresh-val').textContent = this.value;
+});
+document.getElementById('pad').addEventListener('input', function(){
+  document.getElementById('pad-val').textContent = this.value;
+});
+
+runBtn.addEventListener('click', run);
+
+var deferredPrompt = null;
+var installBtn = document.getElementById('install-btn');
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = 'inline-flex';
+});
+installBtn.addEventListener('click', function(){
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(){ deferredPrompt = null; installBtn.style.display = 'none'; });
+});
+window.addEventListener('appinstalled', function(){
+  showToast('Installed. Find it on your home screen.');
+  installBtn.style.display = 'none';
+});
+var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+if (isIos && !isStandalone){
+  document.getElementById('ios-hint').style.display = 'block';
+}
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+})();
+</script>
+</body>
+</html>
