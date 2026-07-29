@@ -920,7 +920,7 @@ function buildWorkerSource(){
     '  if (x > 0 && y + h < canvasH) ctx.drawImage(ctx.canvas, x, y + h - 1, 1, 1, x - 1, y + h, 1, 1);',
     '  if (x + w < canvasW && y + h < canvasH) ctx.drawImage(ctx.canvas, x + w - 1, y + h - 1, 1, 1, x + w, y + h, 1, 1);',
     '}',
-    'self.onmessage = function(e){',
+    'self.onmessage = async function(e){',
     '  var data = e.data;',
     '  try {',
     '    var bitmap = data.bitmap;',
@@ -948,6 +948,7 @@ function buildWorkerSource(){
     '      if (performance.now() - lastPost > 16){',
     '        self.postMessage({ type: "progress", done: idx + 1, total: subs.length, sub: sub });',
     '        lastPost = performance.now();',
+    '        await new Promise(function(r){ setTimeout(r, 0); });',
     '      }',
     '    }',
     '    self.postMessage({ type: "progress", done: subs.length, total: subs.length, sub: subs[subs.length - 1] });',
@@ -959,12 +960,21 @@ function buildWorkerSource(){
     '    var outCtx = outSheet.getContext("2d");',
     '    outCtx.imageSmoothingEnabled = false;',
     '    var frameEntries = new Array(packItems.length);',
-    '    packed.placed.forEach(function(p){',
+    '    var placed = packed.placed;',
+    '    lastPost = performance.now();',
+    '    for (var pi = 0; pi < placed.length; pi++){',
+    '      var p = placed[pi];',
     '      outCtx.drawImage(p.ref.canvas, p.x, p.y);',
     '      if (opts.extrude) extrude(outCtx, p.x, p.y, p.ref.w, p.ref.h, canvasW, canvasH);',
     '      frameEntries[p.ref.idx] = { name: p.ref.name, x: p.x, y: p.y, w: p.ref.w, h: p.ref.h,',
     '        frameX: p.ref.frameX, frameY: p.ref.frameY, frameW: p.ref.frameW, frameH: p.ref.frameH };',
-    '    });',
+    '      if (performance.now() - lastPost > 16){',
+    '        self.postMessage({ type: "pack-progress", done: pi + 1, total: placed.length });',
+    '        lastPost = performance.now();',
+    '        await new Promise(function(r){ setTimeout(r, 0); });',
+    '      }',
+    '    }',
+    '    self.postMessage({ type: "pack-progress", done: placed.length, total: placed.length });',
     '    self.postMessage({ type: "phase", phase: "encoding" });',
     '    var origPixels = bitmap.width * bitmap.height;',
     '    var newPixels = canvasW * canvasH;',
@@ -982,7 +992,7 @@ function buildWorkerSource(){
 }
 
 var workerSourceUrl = null;
-function runInWorker(bitmap, subs, opts, onProgress, onPhase){
+function runInWorker(bitmap, subs, opts, onProgress, onPhase, onPack){
   return new Promise(function(resolve, reject){
     if (!workerSourceUrl){
       workerSourceUrl = URL.createObjectURL(new Blob([buildWorkerSource()], { type: 'application/javascript' }));
@@ -992,6 +1002,8 @@ function runInWorker(bitmap, subs, opts, onProgress, onPhase){
       var msg = e.data;
       if (msg.type === 'progress'){
         if (onProgress) onProgress(msg.done, msg.total, msg.sub);
+      } else if (msg.type === 'pack-progress'){
+        if (onPack) onPack(msg.done, msg.total);
       } else if (msg.type === 'phase'){
         if (onPhase) onPhase(msg.phase);
       } else if (msg.type === 'done'){
@@ -1018,7 +1030,7 @@ async function processAtlas(pngImage, atlasText, opts){
       var bitmap = await createImageBitmap(pngImage);
       var result = await runInWorker(bitmap, atlas.subs, {
         threshold: opts.threshold, padding: opts.padding, extrude: opts.extrude, pow2: opts.pow2
-      }, opts.onFrame, opts.onPhase);
+      }, opts.onFrame, opts.onPhase, opts.onPack);
       return {
         blob: result.blob,
         subs: atlas.subs,
@@ -1108,6 +1120,7 @@ async function processAtlasMainThread(pngImage, atlas, opts){
       frameW: p.ref.frameW, frameH: p.ref.frameH
     };
     if (performance.now() - lastYield > 12){
+      if (opts.onPack) opts.onPack(pIdx + 1, packed.placed.length);
       await new Promise(function(r){ setTimeout(r, 0); });
       lastYield = performance.now();
     }
@@ -1184,7 +1197,11 @@ async function run(){
         onPhase: function(phase){
           var label = phase === 'packing' ? 'packing sprites…' : 'encoding png…';
           scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + label;
-          setProgress(pairBase + pairSpan * (phase === 'packing' ? 0.75 : 0.9));
+          setProgress(pairBase + pairSpan * (phase === 'packing' ? 0.72 : 0.9));
+        },
+        onPack: function(done, total){
+          scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + 'packing ' + done + '/' + total;
+          setProgress(pairBase + pairSpan * (0.72 + (done / total) * 0.18));
         }
       }));
 
