@@ -266,6 +266,7 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
       <div class="tags">
         <span class="tag">Sparrow XML</span>
         <span class="tag">Spritemap JSON</span>
+        <span class="tag">Background thread</span>
         <span class="tag">Character .json</span>
         <span class="tag">Edge extrusion</span>
         <span class="tag">Runs fully in-browser</span>
@@ -300,7 +301,7 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
     <h2 class="section-title">The pipeline</h2>
     <div class="steps">
       <div class="step"><div class="n">01</div><h3>Drop</h3><p>Give it a PNG spritesheet and its matching Sparrow XML or spritemap JSON atlas.</p></div>
-      <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every frame is measured pixel-by-pixel, live, for transparent padding beyond its declared frame.</p></div>
+      <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every frame is measured pixel-by-pixel on a background thread, live, so the page never freezes while it works.</p></div>
       <div class="step"><div class="n">03</div><h3>Repack</h3><p>Trimmed frames are re-packed into the smallest sheet that fits, edges extruded to stop bleeding.</p></div>
       <div class="step"><div class="n">04</div><h3>Download</h3><p>Optimized PNG, rewritten XML, a character .json and a savings report land in a .zip — downloaded the moment processing finishes.</p></div>
     </div>
@@ -849,9 +850,185 @@ function extrude(ctx, x, y, w, h, canvasW, canvasH){
   if (x + w < canvasW && y + h < canvasH) ctx.drawImage(ctx.canvas, x + w - 1, y + h - 1, 1, 1, x + w, y + h, 1, 1);
 }
 
+var workerSupported = typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined';
+
+function buildWorkerSource(){
+  return [
+    'function extractRegion(srcCanvas, x, y, w, h, rotated){',
+    '  var rw = rotated ? h : w;',
+    '  var rh = rotated ? w : h;',
+    '  var c = new OffscreenCanvas(Math.max(1, w), Math.max(1, h));',
+    '  var ctx = c.getContext("2d");',
+    '  ctx.imageSmoothingEnabled = false;',
+    '  if (rotated){',
+    '    ctx.save();',
+    '    ctx.translate(0, h);',
+    '    ctx.rotate(-Math.PI / 2);',
+    '    ctx.drawImage(srcCanvas, x, y, rw, rh, 0, 0, rh, rw);',
+    '    ctx.restore();',
+    '  } else {',
+    '    ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);',
+    '  }',
+    '  return c;',
+    '}',
+    'function trimCanvas(canvas, threshold){',
+    '  var ctx = canvas.getContext("2d");',
+    '  var w = canvas.width, h = canvas.height;',
+    '  if (w <= 1 && h <= 1) return { left:0, top:0, right:0, bottom:0, w:w, h:h };',
+    '  var imgData = ctx.getImageData(0, 0, w, h);',
+    '  var pixels = new Uint32Array(imgData.data.buffer);',
+    '  var minX = w, minY = h, maxX = -1, maxY = -1;',
+    '  for (var yy = 0; yy < h; yy++){',
+    '    var rowBase = yy * w;',
+    '    for (var xx = 0; xx < w; xx++){',
+    '      var a = (pixels[rowBase + xx] >>> 24) & 0xFF;',
+    '      if (a > threshold){',
+    '        if (xx < minX) minX = xx;',
+    '        if (xx > maxX) maxX = xx;',
+    '        if (yy < minY) minY = yy;',
+    '        if (yy > maxY) maxY = yy;',
+    '      }',
+    '    }',
+    '  }',
+    '  if (maxX < 0) return { left:0, top:0, right:w - 1, bottom:h - 1, w:1, h:1, empty:true };',
+    '  return { left:minX, top:minY, right:w - 1 - maxX, bottom:h - 1 - maxY, w:(maxX - minX + 1), h:(maxY - minY + 1) };',
+    '}',
+    'function packRects(items, padding){',
+    '  var sorted = items.slice().sort(function(a, b){ return b.h - a.h || b.w - a.w; });',
+    '  var totalArea = sorted.reduce(function(s, it){ return s + (it.w + padding) * (it.h + padding); }, 0);',
+    '  var targetW = Math.max(64, Math.ceil(Math.sqrt(totalArea) * 1.05));',
+    '  var x = padding, y = padding, shelfH = 0, maxW = 0;',
+    '  var placed = [];',
+    '  sorted.forEach(function(it){',
+    '    if (x + it.w + padding > targetW && x > padding){ x = padding; y += shelfH + padding; shelfH = 0; }',
+    '    placed.push({ ref: it, x: x, y: y });',
+    '    x += it.w + padding;',
+    '    shelfH = Math.max(shelfH, it.h);',
+    '    maxW = Math.max(maxW, x);',
+    '  });',
+    '  var totalH = y + shelfH + padding;',
+    '  return { placed: placed, width: maxW, height: totalH };',
+    '}',
+    'function nextPow2(n){ var p = 1; while (p < n) p *= 2; return p; }',
+    'function extrude(ctx, x, y, w, h, canvasW, canvasH){',
+    '  if (x > 0) ctx.drawImage(ctx.canvas, x, y, 1, h, x - 1, y, 1, h);',
+    '  if (x + w < canvasW) ctx.drawImage(ctx.canvas, x + w - 1, y, 1, h, x + w, y, 1, h);',
+    '  if (y > 0) ctx.drawImage(ctx.canvas, x, y, w, 1, x, y - 1, w, 1);',
+    '  if (y + h < canvasH) ctx.drawImage(ctx.canvas, x, y + h - 1, w, 1, x, y + h, w, 1);',
+    '  if (x > 0 && y > 0) ctx.drawImage(ctx.canvas, x, y, 1, 1, x - 1, y - 1, 1, 1);',
+    '  if (x + w < canvasW && y > 0) ctx.drawImage(ctx.canvas, x + w - 1, y, 1, 1, x + w, y - 1, 1, 1);',
+    '  if (x > 0 && y + h < canvasH) ctx.drawImage(ctx.canvas, x, y + h - 1, 1, 1, x - 1, y + h, 1, 1);',
+    '  if (x + w < canvasW && y + h < canvasH) ctx.drawImage(ctx.canvas, x + w - 1, y + h - 1, 1, 1, x + w, y + h, 1, 1);',
+    '}',
+    'self.onmessage = function(e){',
+    '  var data = e.data;',
+    '  try {',
+    '    var bitmap = data.bitmap;',
+    '    var subs = data.subs;',
+    '    var opts = data.opts;',
+    '    var srcCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);',
+    '    var sctx = srcCanvas.getContext("2d");',
+    '    sctx.imageSmoothingEnabled = false;',
+    '    sctx.drawImage(bitmap, 0, 0);',
+    '    var framesTrimmed = 0;',
+    '    var packItems = [];',
+    '    var lastPost = performance.now();',
+    '    for (var idx = 0; idx < subs.length; idx++){',
+    '      var sub = subs[idx];',
+    '      var regionCanvas = extractRegion(srcCanvas, sub.x, sub.y, sub.width, sub.height, sub.rotated);',
+    '      var box = trimCanvas(regionCanvas, opts.threshold);',
+    '      var changed = !(box.left === 0 && box.top === 0 && box.w === regionCanvas.width && box.h === regionCanvas.height);',
+    '      if (changed) framesTrimmed++;',
+    '      var outCanvas = new OffscreenCanvas(Math.max(1, box.w), Math.max(1, box.h));',
+    '      var octx = outCanvas.getContext("2d");',
+    '      octx.imageSmoothingEnabled = false;',
+    '      octx.drawImage(regionCanvas, -box.left, -box.top);',
+    '      packItems.push({ idx: idx, name: sub.name, w: box.w, h: box.h, canvas: outCanvas,',
+    '        frameX: sub.frameX + box.left, frameY: sub.frameY + box.top, frameW: sub.frameWidth, frameH: sub.frameHeight });',
+    '      if (performance.now() - lastPost > 16){',
+    '        self.postMessage({ type: "progress", done: idx + 1, total: subs.length, sub: sub });',
+    '        lastPost = performance.now();',
+    '      }',
+    '    }',
+    '    self.postMessage({ type: "progress", done: subs.length, total: subs.length, sub: subs[subs.length - 1] });',
+    '    var packed = packRects(packItems, opts.padding);',
+    '    var canvasW = packed.width, canvasH = packed.height;',
+    '    if (opts.pow2){ canvasW = nextPow2(canvasW); canvasH = nextPow2(canvasH); }',
+    '    var outSheet = new OffscreenCanvas(canvasW, canvasH);',
+    '    var outCtx = outSheet.getContext("2d");',
+    '    outCtx.imageSmoothingEnabled = false;',
+    '    var frameEntries = new Array(packItems.length);',
+    '    packed.placed.forEach(function(p){',
+    '      outCtx.drawImage(p.ref.canvas, p.x, p.y);',
+    '      if (opts.extrude) extrude(outCtx, p.x, p.y, p.ref.w, p.ref.h, canvasW, canvasH);',
+    '      frameEntries[p.ref.idx] = { name: p.ref.name, x: p.x, y: p.y, w: p.ref.w, h: p.ref.h,',
+    '        frameX: p.ref.frameX, frameY: p.ref.frameY, frameW: p.ref.frameW, frameH: p.ref.frameH };',
+    '    });',
+    '    var origPixels = bitmap.width * bitmap.height;',
+    '    var newPixels = canvasW * canvasH;',
+    '    var pixelReduction = origPixels > 0 ? (1 - newPixels / origPixels) * 100 : 0;',
+    '    outSheet.convertToBlob({ type: "image/png" }).then(function(blob){',
+    '      self.postMessage({ type: "done", blob: blob, frameEntries: frameEntries, canvasW: canvasW, canvasH: canvasH,',
+    '        stats: { origW: bitmap.width, origH: bitmap.height, newW: canvasW, newH: canvasH,',
+    '          framesTotal: subs.length, framesTrimmed: framesTrimmed, pixelReduction: pixelReduction } });',
+    '    });',
+    '  } catch (err){',
+    '    self.postMessage({ type: "error", message: (err && err.message) || "Worker processing failed." });',
+    '  }',
+    '};'
+  ].join('\n');
+}
+
+var workerSourceUrl = null;
+function runInWorker(bitmap, subs, opts, onProgress){
+  return new Promise(function(resolve, reject){
+    if (!workerSourceUrl){
+      workerSourceUrl = URL.createObjectURL(new Blob([buildWorkerSource()], { type: 'application/javascript' }));
+    }
+    var worker = new Worker(workerSourceUrl);
+    worker.onmessage = function(e){
+      var msg = e.data;
+      if (msg.type === 'progress'){
+        if (onProgress) onProgress(msg.done, msg.total, msg.sub);
+      } else if (msg.type === 'done'){
+        worker.terminate();
+        resolve(msg);
+      } else if (msg.type === 'error'){
+        worker.terminate();
+        reject(new Error(msg.message));
+      }
+    };
+    worker.onerror = function(err){
+      worker.terminate();
+      reject(new Error(err.message || 'Worker failed.'));
+    };
+    worker.postMessage({ bitmap: bitmap, subs: subs, opts: opts }, [bitmap]);
+  });
+}
+
 async function processAtlas(pngImage, atlasText, opts){
   var atlas = parseAtlasText(atlasText, opts.format);
 
+  if (workerSupported){
+    try {
+      var bitmap = await createImageBitmap(pngImage);
+      var result = await runInWorker(bitmap, atlas.subs, {
+        threshold: opts.threshold, padding: opts.padding, extrude: opts.extrude, pow2: opts.pow2
+      }, opts.onFrame);
+      return {
+        blob: result.blob,
+        subs: atlas.subs,
+        stats: result.stats,
+        atlasText: buildAtlasText(opts.format, opts.pngOutName, result.frameEntries, result.canvasW, result.canvasH)
+      };
+    } catch (err){
+      return processAtlasMainThread(pngImage, atlas, opts);
+    }
+  }
+  return processAtlasMainThread(pngImage, atlas, opts);
+}
+
+async function processAtlasMainThread(pngImage, atlas, opts){
   var srcCanvas = document.createElement('canvas');
   srcCanvas.width = pngImage.width;
   srcCanvas.height = pngImage.height;
@@ -932,7 +1109,6 @@ async function processAtlas(pngImage, atlasText, opts){
     outSheet.toBlob(function(blob){
       resolve({
         blob: blob,
-        srcCanvas: srcCanvas,
         subs: atlas.subs,
         stats: {
           origW: pngImage.width, origH: pngImage.height,
@@ -967,6 +1143,7 @@ async function run(){
   var multi = state.pairs.length > 1;
   var results = [];
   var lastResult = null;
+  var lastPngImage = null;
 
   try {
     for (var i = 0; i < state.pairs.length; i++){
@@ -1004,6 +1181,7 @@ async function run(){
       }
       results.push({ key: pair.key, stats: result.stats });
       lastResult = result;
+      lastPngImage = pngImage;
     }
   } catch (err){
     isRunning = false;
@@ -1047,7 +1225,7 @@ async function run(){
     setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
 
     renderResults(results, overallReduction, content.size);
-    if (lastResult) drawTrimOverlay(lastResult.srcCanvas, lastResult.subs);
+    if (lastResult) drawTrimOverlay(lastPngImage, lastResult.subs);
     scannerStatus.textContent = 'done';
     scanline.classList.remove('on');
     stage.classList.remove('busy');
@@ -1067,11 +1245,11 @@ function finishWithError(msg){
   showToast(msg, true);
 }
 
-function drawTrimOverlay(srcCanvas, subs){
+function drawTrimOverlay(pngImage, subs){
+  drawScanBase(pngImage);
   var ctx = previewCanvas.getContext('2d');
-  var scaleX = previewCanvas.width / srcCanvas.width;
-  var scaleY = previewCanvas.height / srcCanvas.height;
-  ctx.drawImage(srcCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+  var scaleX = previewCanvas.width / pngImage.width;
+  var scaleY = previewCanvas.height / pngImage.height;
   ctx.strokeStyle = '#39ff88';
   ctx.lineWidth = 1;
   subs.forEach(function(s){
