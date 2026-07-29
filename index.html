@@ -862,7 +862,7 @@ async function processAtlas(pngImage, atlasText, opts){
   var framesTrimmed = 0;
   var packItems = [];
   var subs = atlas.subs;
-  var chunk = 6;
+  var lastYield = performance.now();
 
   for (var idx = 0; idx < subs.length; idx++){
     var sub = subs[idx];
@@ -891,8 +891,10 @@ async function processAtlas(pngImage, atlasText, opts){
     });
 
     if (opts.onFrame) opts.onFrame(idx + 1, subs.length, sub);
-    if (idx % chunk === chunk - 1){
-      await new Promise(function(r){ requestAnimationFrame(r); });
+
+    if (performance.now() - lastYield > 12){
+      await new Promise(function(r){ setTimeout(r, 0); });
+      lastYield = performance.now();
     }
   }
 
