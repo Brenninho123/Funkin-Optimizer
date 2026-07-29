@@ -191,6 +191,18 @@ section.results{padding:40px 0;}
 .field{display:flex;flex-direction:column;gap:8px;}
 .field label{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;}
 .field input[type=range]{accent-color:var(--amber);}
+.text-input{
+  background:var(--bg-2);border:1px solid var(--border-strong);border-radius:8px;
+  color:var(--text);font-family:var(--mono);font-size:12.5px;padding:9px 10px;width:100%;
+}
+.text-input:focus{border-color:var(--amber);}
+.anim-table{width:100%;border-collapse:collapse;margin-top:16px;font-family:var(--mono);font-size:11.5px;}
+.anim-table th{text-align:left;color:var(--muted);font-weight:500;padding:8px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.05em;font-size:10.5px;}
+.anim-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.anim-table input[type=text]{width:130px;}
+.anim-table input[type=number]{width:56px;}
+.anim-table td .text-input{padding:6px 8px;}
+.anim-note{color:var(--muted);font-size:12px;margin-top:14px;font-family:var(--mono);}
 .field-toggle{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:9px;padding:12px 14px;}
 .field-toggle .t{font-size:13px;}
 .field-toggle .d{font-size:11.5px;color:var(--muted);margin-top:3px;}
@@ -248,9 +260,10 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
     <div>
       <div class="eyebrow">Sparrow / Starling atlas tool</div>
       <h1>Trim the fat off<br>your <span class="accent">spritesheets</span>.</h1>
-      <p class="lead">Drop a PNG and its XML atlas. Every frame gets scanned for wasted transparent padding, repacked into the smallest sheet that fits, and shipped back to you as a ready-to-use .zip — automatically.</p>
+      <p class="lead">Drop a PNG and its XML atlas. Every frame gets scanned for wasted transparent padding, repacked into the smallest sheet that fits, and shipped back to you as a ready-to-use .zip — automatically, no click needed. A matching character .json comes along for the ride.</p>
       <div class="tags">
         <span class="tag">Sparrow / Starling XML</span>
+        <span class="tag">Character .json</span>
         <span class="tag">Edge extrusion</span>
         <span class="tag">Runs fully in-browser</span>
         <span class="tag">Installable app</span>
@@ -258,7 +271,7 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
       <div class="file-row" id="pairs-list">
         <div class="file-slot"><span class="chip"></span><span class="k">PAIRS</span><span class="v">none loaded</span></div>
       </div>
-      <button class="btn btn-primary btn-block" id="run-btn" disabled>Optimize &amp; download .zip</button>
+      <button class="btn btn-primary btn-block" id="run-btn" disabled>Optimize now</button>
       <div class="progress" id="progress-wrap" style="display:none;"><i id="progress-bar"></i></div>
     </div>
 
@@ -286,8 +299,9 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
       <div class="step"><div class="n">01</div><h3>Drop</h3><p>Give it a PNG spritesheet and its matching Sparrow/Starling XML atlas.</p></div>
       <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every SubTexture is measured pixel-by-pixel for transparent padding beyond its declared frame.</p></div>
       <div class="step"><div class="n">03</div><h3>Repack</h3><p>Trimmed frames are re-packed into the smallest sheet that fits, edges extruded to stop bleeding.</p></div>
-      <div class="step"><div class="n">04</div><h3>Download</h3><p>Optimized PNG, rewritten XML and a savings report land in a .zip, downloaded automatically.</p></div>
+      <div class="step"><div class="n">04</div><h3>Download</h3><p>Optimized PNG, rewritten XML, a character .json and a savings report land in a .zip — downloaded the moment processing finishes.</p></div>
     </div>
+    <div class="anim-note" style="margin:14px 2px 0;">Downloading starts on its own about a second after a full pair is detected — no button needed. Add more pairs any time to re-run.</div>
 
     <details class="adv">
       <summary>Advanced settings <svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -308,6 +322,32 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
           <div><div class="t">Power-of-two canvas</div><div class="d">Rounds the final sheet up to 2,4,8…2048 per side.</div></div>
           <label class="switch"><input type="checkbox" id="pow2"><span class="track"></span><span class="thumb"></span></label>
         </div>
+      </div>
+    </details>
+
+    <details class="adv" open>
+      <summary>Character JSON <svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="adv-body" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="field-toggle" style="grid-column:1/-1;">
+          <div><div class="t">Generate character .json</div><div class="d">Groups frames into animations and adds a Psych/Kade-style character file to the .zip.</div></div>
+          <label class="switch"><input type="checkbox" id="gen-json" checked><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <div class="field"><label>Image path <span></span></label><input type="text" id="json-image" value="characters/{name}" class="text-input"></div>
+        <div class="field"><label>Health icon <span></span></label><input type="text" id="json-healthicon" value="{name}" class="text-input"></div>
+        <div class="field"><label>Scale <span></span></label><input type="number" id="json-scale" value="1" step="0.05" class="text-input"></div>
+        <div class="field"><label>Sing duration <span></span></label><input type="number" id="json-singdur" value="4" step="0.5" class="text-input"></div>
+        <div class="field"><label>Position x,y <span></span></label>
+          <div style="display:flex;gap:8px;"><input type="number" id="json-pos-x" value="0" class="text-input"><input type="number" id="json-pos-y" value="0" class="text-input"></div>
+        </div>
+        <div class="field"><label>Camera position x,y <span></span></label>
+          <div style="display:flex;gap:8px;"><input type="number" id="json-cam-x" value="0" class="text-input"><input type="number" id="json-cam-y" value="0" class="text-input"></div>
+        </div>
+        <div class="field"><label>Healthbar color r,g,b <span></span></label>
+          <div style="display:flex;gap:8px;"><input type="number" id="json-hb-r" value="255" min="0" max="255" class="text-input"><input type="number" id="json-hb-g" value="255" min="0" max="255" class="text-input"><input type="number" id="json-hb-b" value="255" min="0" max="255" class="text-input"></div>
+        </div>
+        <div class="field-toggle"><div><div class="t">Flip X</div></div><label class="switch"><input type="checkbox" id="json-flipx"><span class="track"></span><span class="thumb"></span></label></div>
+        <div class="field-toggle"><div><div class="t">No antialiasing</div></div><label class="switch"><input type="checkbox" id="json-noaa"><span class="track"></span><span class="thumb"></span></label></div>
+        <div style="grid-column:1/-1;" id="anim-table-wrap"></div>
       </div>
     </details>
   </section>
@@ -358,7 +398,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <script>
 (function(){
 
-var state = { pngMap:{}, xmlMap:{}, pairs:[] };
+var state = { pngMap:{}, xmlMap:{}, pairs:[], animOverrides:{} };
+var isRunning = false;
+var autoRunTimer = null;
 
 var stage = document.getElementById('stage');
 var fileInput = document.getElementById('file-input');
@@ -417,6 +459,7 @@ function handleFiles(fileList){
 
   var keys = Object.keys(state.pngMap).filter(function(k){ return state.xmlMap[k]; });
   state.pairs = keys.map(function(k){ return { key:k, pngFile: state.pngMap[k], xmlFile: state.xmlMap[k] }; });
+  state.animOverrides = {};
 
   var unmatched = Object.keys(state.pngMap).filter(function(k){ return !state.xmlMap[k]; })
     .concat(Object.keys(state.xmlMap).filter(function(k){ return !state.pngMap[k]; }));
@@ -427,8 +470,114 @@ function handleFiles(fileList){
     previewPng(state.pairs[state.pairs.length - 1].pngFile);
   }
 
+  if (state.pairs.length === 1){
+    loadAnimTableFor(state.pairs[0]);
+  } else {
+    document.getElementById('anim-table-wrap').innerHTML = state.pairs.length > 1
+      ? '<div class="anim-note">Batch mode: animation keys are auto-guessed per atlas from frame names — edit the exported .json afterward if needed.</div>'
+      : '';
+  }
+
   runBtn.disabled = state.pairs.length === 0;
-  scannerStatus.textContent = state.pairs.length ? (state.pairs.length + ' pair' + (state.pairs.length > 1 ? 's' : '') + ' ready') : 'idle';
+
+  clearTimeout(autoRunTimer);
+  if (state.pairs.length && !unmatched.length && !isRunning){
+    scannerStatus.textContent = state.pairs.length + ' pair' + (state.pairs.length > 1 ? 's' : '') + ' — auto-optimizing…';
+    autoRunTimer = setTimeout(function(){ if (!isRunning) run(); }, 900);
+  } else {
+    scannerStatus.textContent = state.pairs.length ? (state.pairs.length + ' pair' + (state.pairs.length > 1 ? 's' : '') + ' ready') : 'idle';
+  }
+}
+
+function groupNamesFromSubs(subs){
+  var seen = {};
+  var order = [];
+  subs.forEach(function(s){
+    var g = s.name.replace(/\d+\s*$/, '').trim();
+    if (!seen[g]){ seen[g] = true; order.push(g); }
+  });
+  return order;
+}
+
+function guessAnimKey(group){
+  var n = group.toLowerCase();
+  var dir = /left/.test(n) ? 'LEFT' : /right/.test(n) ? 'RIGHT' : /down/.test(n) ? 'DOWN' : /up/.test(n) ? 'UP' : null;
+  if (dir) return 'sing' + dir + (/miss/.test(n) ? 'miss' : '');
+  if (/scared|shak/.test(n)) return 'scared';
+  if (/idle/.test(n)) return 'idle';
+  if (/hey/.test(n)) return 'hey';
+  if (/hurt|\bhit\b/.test(n)) return 'hurt';
+  if (/dodge/.test(n)) return 'dodge';
+  if (/pre.?attack/.test(n)) return 'pre-attack';
+  if (/attack/.test(n)) return 'attack';
+  if (/death|dead/.test(n)) return 'deathLoop';
+  if (/confirm/.test(n)) return 'confirm';
+  var words = group.replace(/[^a-zA-Z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  if (!words.length) return 'anim';
+  return words[0].toLowerCase() + words.slice(1).map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }).join('');
+}
+
+function loadAnimTableFor(pair){
+  readText(pair.xmlFile).then(function(xmlText){
+    var atlas;
+    try { atlas = parseAtlas(xmlText); } catch (e){ return; }
+    var groups = groupNamesFromSubs(atlas.subs);
+    groups.forEach(function(g){
+      if (!state.animOverrides[g]){
+        state.animOverrides[g] = { anim: guessAnimKey(g), fps: 24, loop: false, offsetX: 0, offsetY: 0 };
+      }
+    });
+    renderAnimTable(groups);
+  }).catch(function(){});
+}
+
+function renderAnimTable(groups){
+  var wrap = document.getElementById('anim-table-wrap');
+  if (!groups.length){ wrap.innerHTML = ''; return; }
+  var rows = groups.map(function(g, i){
+    var o = state.animOverrides[g];
+    return '<tr data-group="' + i + '">' +
+      '<td>' + g + '</td>' +
+      '<td><input type="text" class="text-input anim-key" value="' + o.anim + '"></td>' +
+      '<td><input type="number" class="text-input anim-fps" value="' + o.fps + '"></td>' +
+      '<td style="text-align:center;"><input type="checkbox" class="anim-loop" ' + (o.loop ? 'checked' : '') + '></td>' +
+      '<td><input type="number" class="text-input anim-ox" value="' + o.offsetX + '"></td>' +
+      '<td><input type="number" class="text-input anim-oy" value="' + o.offsetY + '"></td>' +
+      '</tr>';
+  }).join('');
+  wrap.innerHTML = '<table class="anim-table"><thead><tr>' +
+    '<th>Frame group</th><th>Anim key</th><th>FPS</th><th>Loop</th><th>Offset X</th><th>Offset Y</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+  groups.forEach(function(g, i){
+    var row = wrap.querySelector('tr[data-group="' + i + '"]');
+    row.querySelector('.anim-key').addEventListener('input', function(){ state.animOverrides[g].anim = this.value; });
+    row.querySelector('.anim-fps').addEventListener('input', function(){ state.animOverrides[g].fps = parseInt(this.value, 10) || 0; });
+    row.querySelector('.anim-loop').addEventListener('change', function(){ state.animOverrides[g].loop = this.checked; });
+    row.querySelector('.anim-ox').addEventListener('input', function(){ state.animOverrides[g].offsetX = parseFloat(this.value) || 0; });
+    row.querySelector('.anim-oy').addEventListener('input', function(){ state.animOverrides[g].offsetY = parseFloat(this.value) || 0; });
+  });
+}
+
+function buildCharacterJson(pairKey, subs, overrides){
+  var groups = groupNamesFromSubs(subs);
+  var animations = groups.map(function(g){
+    var o = overrides[g] || { anim: guessAnimKey(g), fps: 24, loop: false, offsetX: 0, offsetY: 0 };
+    return { offsets: [o.offsetX || 0, o.offsetY || 0], loop: !!o.loop, fps: o.fps || 24, anim: o.anim || guessAnimKey(g), indices: [], name: g };
+  });
+  var get = function(id){ return document.getElementById(id); };
+  return {
+    animations: animations,
+    no_antialiasing: get('json-noaa').checked,
+    image: get('json-image').value.replace(/\{name\}/g, pairKey),
+    position: [parseFloat(get('json-pos-x').value) || 0, parseFloat(get('json-pos-y').value) || 0],
+    healthicon: get('json-healthicon').value.replace(/\{name\}/g, pairKey),
+    flip_x: get('json-flipx').checked,
+    healthbar_colors: [parseInt(get('json-hb-r').value, 10) || 0, parseInt(get('json-hb-g').value, 10) || 0, parseInt(get('json-hb-b').value, 10) || 0],
+    camera_position: [parseFloat(get('json-cam-x').value) || 0, parseFloat(get('json-cam-y').value) || 0],
+    sing_duration: parseFloat(get('json-singdur').value) || 4,
+    scale: parseFloat(get('json-scale').value) || 1
+  };
 }
 
 function renderPairsList(unmatched){
@@ -699,7 +848,9 @@ function processAtlas(pngImage, xmlText, opts){
 }
 
 async function run(){
-  if (!state.pairs.length) return;
+  if (!state.pairs.length || isRunning) return;
+  isRunning = true;
+  clearTimeout(autoRunTimer);
   runBtn.disabled = true;
   scanline.classList.add('on');
   setProgress(4);
@@ -710,6 +861,7 @@ async function run(){
     extrude: document.getElementById('extrude').checked,
     pow2: document.getElementById('pow2').checked
   };
+  var genJson = document.getElementById('gen-json').checked;
 
   var zip = new JSZip();
   var multi = state.pairs.length > 1;
@@ -730,10 +882,16 @@ async function run(){
       var folder = multi ? zip.folder(pair.key) : zip;
       folder.file(pngOutName, result.blob);
       folder.file(pair.key + '.xml', result.xmlText);
+      if (genJson){
+        var overrides = state.pairs.length === 1 ? state.animOverrides : {};
+        var jsonObj = buildCharacterJson(pair.key, result.subs, overrides);
+        folder.file(pair.key + '.json', JSON.stringify(jsonObj, null, '\t'));
+      }
       results.push({ key: pair.key, stats: result.stats });
       lastResult = result;
     }
   } catch (err){
+    isRunning = false;
     finishWithError(err.message || 'Something went wrong while optimizing.');
     return;
   }
@@ -756,7 +914,8 @@ async function run(){
   });
   reportLines.push('', 'Overall area reduction: ' + overallReduction.toFixed(1) + '%');
   reportLines.push('Alpha threshold: ' + opts.threshold, 'Padding: ' + opts.padding + 'px',
-    'Edge extrusion: ' + (opts.extrude ? 'on' : 'off'), 'Power-of-two: ' + (opts.pow2 ? 'on' : 'off'));
+    'Edge extrusion: ' + (opts.extrude ? 'on' : 'off'), 'Power-of-two: ' + (opts.pow2 ? 'on' : 'off'),
+    'Character JSON: ' + (genJson ? 'included' : 'skipped'));
   zip.file('report.txt', reportLines.join('\n'));
 
   var zipName = multi ? 'funkin-optimizer-batch.zip' : (state.pairs[0].key + '-optimized.zip');
@@ -777,6 +936,7 @@ async function run(){
     scannerStatus.textContent = 'done';
     scanline.classList.remove('on');
     runBtn.disabled = false;
+    isRunning = false;
     showToast('Downloaded ' + zipName);
   });
 }
@@ -785,6 +945,7 @@ function finishWithError(msg){
   scanline.classList.remove('on');
   scannerStatus.textContent = 'error';
   runBtn.disabled = false;
+  isRunning = false;
   setProgress(-1);
   showToast(msg, true);
 }
