@@ -117,8 +117,10 @@ h1 .accent{color:var(--amber);}
   background:linear-gradient(180deg, transparent, rgba(255,176,0,0.22) 45%, rgba(255,176,0,0.55) 50%, rgba(255,176,0,0.22) 55%, transparent);
   top:-60px;opacity:0;
 }
-.scanline.on{animation:sweep 1.3s linear infinite;opacity:1;}
+.scanline.on{animation:sweep 0.6s linear infinite;opacity:1;}
 @keyframes sweep{from{top:-60px;}to{top:100%;}}
+.stage.busy{animation:stagepulse 0.6s ease-in-out infinite;}
+@keyframes stagepulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(255,176,0,0.15);}50%{box-shadow:inset 0 0 0 1px rgba(255,176,0,0.5);}}
 
 .file-row{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:150px;overflow-y:auto;}
 .file-slot{
@@ -258,11 +260,12 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
 
   <section class="hero">
     <div>
-      <div class="eyebrow">Sparrow / Starling atlas tool</div>
+      <div class="eyebrow">Sparrow XML &amp; spritemap JSON atlas tool</div>
       <h1>Trim the fat off<br>your <span class="accent">spritesheets</span>.</h1>
-      <p class="lead">Drop a PNG and its XML atlas. Every frame gets scanned for wasted transparent padding, repacked into the smallest sheet that fits, and shipped back to you as a ready-to-use .zip — automatically, no click needed. A matching character .json comes along for the ride.</p>
+      <p class="lead">Drop a PNG and its Sparrow XML or spritemap JSON atlas. Every frame gets scanned for wasted transparent padding, repacked into the smallest sheet that fits, and shipped back to you as a ready-to-use .zip — automatically, no click needed. A matching character .json comes along for the ride.</p>
       <div class="tags">
-        <span class="tag">Sparrow / Starling XML</span>
+        <span class="tag">Sparrow XML</span>
+        <span class="tag">Spritemap JSON</span>
         <span class="tag">Character .json</span>
         <span class="tag">Edge extrusion</span>
         <span class="tag">Runs fully in-browser</span>
@@ -285,19 +288,19 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
         <div class="stage-empty" id="stage-empty">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#7c8a96" stroke-width="1.4"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
           <b>Drop your atlas here</b>
-          <span>or click to browse — one or more matching .png + .xml pairs</span>
+          <span>or click to browse — one or more matching .png + .xml/.json pairs</span>
         </div>
         <canvas id="preview-canvas" style="display:none;"></canvas>
       </div>
-      <input type="file" id="file-input" accept=".png,.xml" multiple class="visually-hidden">
+      <input type="file" id="file-input" accept=".png,.xml,.json" multiple class="visually-hidden">
     </div>
   </section>
 
   <section class="how" id="how">
     <h2 class="section-title">The pipeline</h2>
     <div class="steps">
-      <div class="step"><div class="n">01</div><h3>Drop</h3><p>Give it a PNG spritesheet and its matching Sparrow/Starling XML atlas.</p></div>
-      <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every SubTexture is measured pixel-by-pixel for transparent padding beyond its declared frame.</p></div>
+      <div class="step"><div class="n">01</div><h3>Drop</h3><p>Give it a PNG spritesheet and its matching Sparrow XML or spritemap JSON atlas.</p></div>
+      <div class="step"><div class="n">02</div><h3>Scan</h3><p>Every frame is measured pixel-by-pixel, live, for transparent padding beyond its declared frame.</p></div>
       <div class="step"><div class="n">03</div><h3>Repack</h3><p>Trimmed frames are re-packed into the smallest sheet that fits, edges extruded to stop bleeding.</p></div>
       <div class="step"><div class="n">04</div><h3>Download</h3><p>Optimized PNG, rewritten XML, a character .json and a savings report land in a .zip — downloaded the moment processing finishes.</p></div>
     </div>
@@ -373,7 +376,7 @@ footer{padding:34px 0 60px;border-top:1px solid var(--border);margin-top:20px;}
   <footer>
     <div class="foot-row">
       <span>Funkin' Optimizer — runs entirely on your device, nothing is uploaded.</span>
-      <span>Sparrow / Starling XML atlas format</span>
+      <span>Sparrow XML or TexturePacker spritemap JSON</span>
     </div>
   </footer>
 </div>
@@ -398,7 +401,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <script>
 (function(){
 
-var state = { pngMap:{}, xmlMap:{}, pairs:[], animOverrides:{} };
+var state = { pngMap:{}, atlasMap:{}, pairs:[], animOverrides:{} };
 var isRunning = false;
 var autoRunTimer = null;
 
@@ -454,15 +457,23 @@ function handleFiles(fileList){
   files.forEach(function(f){
     var lower = f.name.toLowerCase();
     if (lower.endsWith('.png')) state.pngMap[baseNameOf(f.name)] = f;
-    else if (lower.endsWith('.xml')) state.xmlMap[baseNameOf(f.name)] = f;
+    else if (lower.endsWith('.xml')){
+      state.atlasMap[baseNameOf(f.name)] = { file: f, format: 'xml' };
+    } else if (lower.endsWith('.json')){
+      var key = baseNameOf(f.name);
+      var existing = state.atlasMap[key];
+      if (!existing || existing.format !== 'xml') state.atlasMap[key] = { file: f, format: 'json' };
+    }
   });
 
-  var keys = Object.keys(state.pngMap).filter(function(k){ return state.xmlMap[k]; });
-  state.pairs = keys.map(function(k){ return { key:k, pngFile: state.pngMap[k], xmlFile: state.xmlMap[k] }; });
+  var keys = Object.keys(state.pngMap).filter(function(k){ return state.atlasMap[k]; });
+  state.pairs = keys.map(function(k){
+    return { key:k, pngFile: state.pngMap[k], atlasFile: state.atlasMap[k].file, atlasFormat: state.atlasMap[k].format };
+  });
   state.animOverrides = {};
 
-  var unmatched = Object.keys(state.pngMap).filter(function(k){ return !state.xmlMap[k]; })
-    .concat(Object.keys(state.xmlMap).filter(function(k){ return !state.pngMap[k]; }));
+  var unmatched = Object.keys(state.pngMap).filter(function(k){ return !state.atlasMap[k]; })
+    .concat(Object.keys(state.atlasMap).filter(function(k){ return !state.pngMap[k]; }));
 
   renderPairsList(unmatched);
 
@@ -483,7 +494,7 @@ function handleFiles(fileList){
   clearTimeout(autoRunTimer);
   if (state.pairs.length && !unmatched.length && !isRunning){
     scannerStatus.textContent = state.pairs.length + ' pair' + (state.pairs.length > 1 ? 's' : '') + ' — auto-optimizing…';
-    autoRunTimer = setTimeout(function(){ if (!isRunning) run(); }, 900);
+    autoRunTimer = setTimeout(function(){ if (!isRunning) run(); }, 500);
   } else {
     scannerStatus.textContent = state.pairs.length ? (state.pairs.length + ' pair' + (state.pairs.length > 1 ? 's' : '') + ' ready') : 'idle';
   }
@@ -518,9 +529,9 @@ function guessAnimKey(group){
 }
 
 function loadAnimTableFor(pair){
-  readText(pair.xmlFile).then(function(xmlText){
+  readText(pair.atlasFile).then(function(text){
     var atlas;
-    try { atlas = parseAtlas(xmlText); } catch (e){ return; }
+    try { atlas = parseAtlasText(text, pair.atlasFormat); } catch (e){ return; }
     var groups = groupNamesFromSubs(atlas.subs);
     groups.forEach(function(g){
       if (!state.animOverrides[g]){
@@ -586,12 +597,32 @@ function renderPairsList(unmatched){
     return;
   }
   var html = state.pairs.map(function(p){
-    return '<div class="file-slot ok"><span class="chip"></span><span class="k">PAIR</span><span class="v">' + p.key + '.png + .xml</span></div>';
+    var fmt = p.atlasFormat === 'json' ? '.json (spritemap)' : '.xml (Sparrow)';
+    return '<div class="file-slot ok"><span class="chip"></span><span class="k">PAIR</span><span class="v">' + p.key + '.png + ' + fmt + '</span></div>';
   }).join('');
   if (unmatched.length){
     html += '<div class="file-slot"><span class="chip"></span><span class="k">WAIT</span><span class="v">' + unmatched.join(', ') + ' missing its match</span></div>';
   }
   pairsList.innerHTML = html;
+}
+
+function drawScanBase(img){
+  stageEmpty.style.display = 'none';
+  previewCanvas.style.display = 'block';
+  var ctx = previewCanvas.getContext('2d');
+  var maxW = 460, maxH = 260;
+  var scale = Math.min(maxW / img.width, maxH / img.height, 1);
+  previewCanvas.width = Math.max(1, Math.round(img.width * scale));
+  previewCanvas.height = Math.max(1, Math.round(img.height * scale));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+}
+
+function drawScanBox(sub, scale){
+  var ctx = previewCanvas.getContext('2d');
+  ctx.strokeStyle = '#ffb000';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sub.x * scale.x, sub.y * scale.y, sub.width * scale.x, sub.height * scale.y);
 }
 
 function previewPng(pngFile){
@@ -629,6 +660,62 @@ function readText(file){
     reader.onerror = function(){ reject(new Error('Could not read ' + file.name)); };
     reader.readAsText(file);
   });
+}
+
+function parseSpritemapJson(jsonText){
+  var data = JSON.parse(jsonText);
+  var meta = data.meta || {};
+  var imagePath = meta.image || 'spritesheet.png';
+  var rawFrames = data.frames;
+  var entries = Array.isArray(rawFrames)
+    ? rawFrames.map(function(f){ return { key: f.filename || f.name || '', v: f }; })
+    : Object.keys(rawFrames || {}).map(function(k){ return { key: k, v: rawFrames[k] }; });
+
+  var subs = entries.map(function(e){
+    var v = e.v;
+    var frame = v.frame || { x:0, y:0, w:0, h:0 };
+    var srcSize = v.sourceSize || { w: frame.w, h: frame.h };
+    var sss = v.spriteSourceSize || { x:0, y:0, w: frame.w, h: frame.h };
+    var name = e.key.replace(/\.png$/i, '');
+    return {
+      name: name,
+      x: frame.x, y: frame.y,
+      width: frame.w, height: frame.h,
+      rotated: !!v.rotated,
+      frameX: v.trimmed ? -(sss.x || 0) : 0,
+      frameY: v.trimmed ? -(sss.y || 0) : 0,
+      frameWidth: v.trimmed ? srcSize.w : frame.w,
+      frameHeight: v.trimmed ? srcSize.h : frame.h
+    };
+  });
+  return { imagePath: imagePath, subs: subs };
+}
+
+function buildSpritemapJson(imagePath, frames, sheetW, sheetH){
+  var out = { frames: {}, meta: { app: 'Funkin\' Optimizer', image: imagePath, size: { w: sheetW, h: sheetH }, scale: '1' } };
+  frames.forEach(function(f){
+    var trimmed = f.frameX !== 0 || f.frameY !== 0 || f.frameW !== f.w || f.frameH !== f.h;
+    out.frames[f.name + '.png'] = {
+      frame: { x: f.x, y: f.y, w: f.w, h: f.h },
+      rotated: false,
+      trimmed: trimmed,
+      spriteSourceSize: { x: -f.frameX, y: -f.frameY, w: f.w, h: f.h },
+      sourceSize: { w: f.frameW, h: f.frameH }
+    };
+  });
+  return JSON.stringify(out, null, '\t');
+}
+
+function detectAtlasFormat(fileName){
+  return fileName.toLowerCase().endsWith('.json') ? 'json' : 'xml';
+}
+
+function parseAtlasText(text, format){
+  return format === 'json' ? parseSpritemapJson(text) : parseAtlas(text);
+}
+
+function buildAtlasText(format, imagePath, frames, sheetW, sheetH){
+  return format === 'json' ? buildSpritemapJson(imagePath, frames, sheetW, sheetH) : buildAtlasXml(imagePath, frames);
 }
 
 function parseAtlas(xmlText){
@@ -703,11 +790,13 @@ function trimCanvas(canvas, threshold){
   var ctx = canvas.getContext('2d');
   var w = canvas.width, h = canvas.height;
   if (w <= 1 && h <= 1) return { left:0, top:0, right:0, bottom:0, w:w, h:h };
-  var data = ctx.getImageData(0, 0, w, h).data;
+  var imgData = ctx.getImageData(0, 0, w, h);
+  var pixels = new Uint32Array(imgData.data.buffer);
   var minX = w, minY = h, maxX = -1, maxY = -1;
   for (var yy = 0; yy < h; yy++){
+    var rowBase = yy * w;
     for (var xx = 0; xx < w; xx++){
-      var a = data[(yy * w + xx) * 4 + 3];
+      var a = (pixels[rowBase + xx] >>> 24) & 0xFF;
       if (a > threshold){
         if (xx < minX) minX = xx;
         if (xx > maxX) maxX = xx;
@@ -760,8 +849,8 @@ function extrude(ctx, x, y, w, h, canvasW, canvasH){
   if (x + w < canvasW && y + h < canvasH) ctx.drawImage(ctx.canvas, x + w - 1, y + h - 1, 1, 1, x + w, y + h, 1, 1);
 }
 
-function processAtlas(pngImage, xmlText, opts){
-  var atlas = parseAtlas(xmlText);
+async function processAtlas(pngImage, atlasText, opts){
+  var atlas = parseAtlasText(atlasText, opts.format);
 
   var srcCanvas = document.createElement('canvas');
   srcCanvas.width = pngImage.width;
@@ -772,8 +861,11 @@ function processAtlas(pngImage, xmlText, opts){
 
   var framesTrimmed = 0;
   var packItems = [];
+  var subs = atlas.subs;
+  var chunk = 6;
 
-  atlas.subs.forEach(function(sub, idx){
+  for (var idx = 0; idx < subs.length; idx++){
+    var sub = subs[idx];
     var regionCanvas = extractRegion(srcCanvas, sub.x, sub.y, sub.width, sub.height, sub.rotated);
     var box = trimCanvas(regionCanvas, opts.threshold);
     var changed = !(box.left === 0 && box.top === 0 && box.w === regionCanvas.width && box.h === regionCanvas.height);
@@ -797,7 +889,12 @@ function processAtlas(pngImage, xmlText, opts){
       frameW: sub.frameWidth,
       frameH: sub.frameHeight
     });
-  });
+
+    if (opts.onFrame) opts.onFrame(idx + 1, subs.length, sub);
+    if (idx % chunk === chunk - 1){
+      await new Promise(function(r){ requestAnimationFrame(r); });
+    }
+  }
 
   var packed = packRects(packItems, opts.padding);
   var canvasW = packed.width;
@@ -841,7 +938,7 @@ function processAtlas(pngImage, xmlText, opts){
           framesTotal: atlas.subs.length, framesTrimmed: framesTrimmed,
           pixelReduction: pixelReduction
         },
-        xmlText: buildAtlasXml(opts.pngOutName, frameEntries)
+        atlasText: buildAtlasText(opts.format, opts.pngOutName, frameEntries, canvasW, canvasH)
       });
     }, 'image/png');
   });
@@ -853,6 +950,7 @@ async function run(){
   clearTimeout(autoRunTimer);
   runBtn.disabled = true;
   scanline.classList.add('on');
+  stage.classList.add('busy');
   setProgress(4);
 
   var opts = {
@@ -871,21 +969,36 @@ async function run(){
   try {
     for (var i = 0; i < state.pairs.length; i++){
       var pair = state.pairs[i];
-      scannerStatus.textContent = 'scanning ' + (i + 1) + '/' + state.pairs.length;
-      setProgress(4 + (i / state.pairs.length) * 80);
+      var pairBase = 4 + (i / state.pairs.length) * 84;
+      var pairSpan = 84 / state.pairs.length;
+      scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + 'scanning ' + pair.key;
+      setProgress(pairBase);
 
-      var xmlText = await readText(pair.xmlFile);
+      var atlasText = await readText(pair.atlasFile);
       var pngImage = await loadImage(pair.pngFile);
+      drawScanBase(pngImage);
       var pngOutName = pair.key + '.png';
-      var result = await processAtlas(pngImage, xmlText, Object.assign({}, opts, { pngOutName: pngOutName }));
+      var scale = { x: previewCanvas.width / pngImage.width, y: previewCanvas.height / pngImage.height };
 
+      var result = await processAtlas(pngImage, atlasText, Object.assign({}, opts, {
+        pngOutName: pngOutName,
+        format: pair.atlasFormat,
+        onFrame: function(done, total, sub){
+          scannerStatus.textContent = (state.pairs.length > 1 ? '[' + (i + 1) + '/' + state.pairs.length + '] ' : '') + 'scanning ' + done + '/' + total;
+          setProgress(pairBase + (done / total) * pairSpan);
+          drawScanBox(sub, scale);
+        }
+      }));
+
+      var atlasOutName = pair.key + (pair.atlasFormat === 'json' ? '.json' : '.xml');
       var folder = multi ? zip.folder(pair.key) : zip;
       folder.file(pngOutName, result.blob);
-      folder.file(pair.key + '.xml', result.xmlText);
+      folder.file(atlasOutName, result.atlasText);
       if (genJson){
         var overrides = state.pairs.length === 1 ? state.animOverrides : {};
         var jsonObj = buildCharacterJson(pair.key, result.subs, overrides);
-        folder.file(pair.key + '.json', JSON.stringify(jsonObj, null, '\t'));
+        var characterJsonName = pair.atlasFormat === 'json' ? pair.key + '-character.json' : pair.key + '.json';
+        folder.file(characterJsonName, JSON.stringify(jsonObj, null, '\t'));
       }
       results.push({ key: pair.key, stats: result.stats });
       lastResult = result;
@@ -935,6 +1048,7 @@ async function run(){
     if (lastResult) drawTrimOverlay(lastResult.srcCanvas, lastResult.subs);
     scannerStatus.textContent = 'done';
     scanline.classList.remove('on');
+    stage.classList.remove('busy');
     runBtn.disabled = false;
     isRunning = false;
     showToast('Downloaded ' + zipName);
@@ -943,6 +1057,7 @@ async function run(){
 
 function finishWithError(msg){
   scanline.classList.remove('on');
+  stage.classList.remove('busy');
   scannerStatus.textContent = 'error';
   runBtn.disabled = false;
   isRunning = false;
